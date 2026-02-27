@@ -29,21 +29,17 @@
           <div class="t2">Vendetta • Tile Picker</div>
         </div>
       </div>
-
-      <button id="btnMode" class="modeBtn" type="button" aria-pressed="false">
-        Игровой режим
-      </button>
     </header>
 
-    <section class="card controls" id="controlsCard">
+    <section class="card controls">
       <label class="toggle">
         <input id="useExpansion" type="checkbox" checked />
         <span>Добавить «Дьявольская мясорубка» (6–10)</span>
       </label>
 
       <div class="row">
-        <button id="btnStart" class="primary">Старт (1a / 1b)</button>
-        <button id="btnNext" class="primary" disabled>Следующий тайл</button>
+        <button id="btnStart" class="primary">Старт + 2 тайла</button>
+        <button id="btnNext" class="primary" disabled>Новый тайл (сброс старого)</button>
       </div>
 
       <div class="row">
@@ -52,32 +48,45 @@
       </div>
 
       <div class="stats">
-        <div><b>Осталось физических тайлов:</b> <span id="remaining">—</span></div>
-        <div><b>Выложено (стороны):</b> <span id="laidCount">—</span></div>
-        <div><b>Стартер убран:</b> <span id="blockedStarter">—</span></div>
+        <div><b>Тайлы на столе:</b> <span id="tableCount">—</span></div>
+        <div><b>Осталось сторон в пуле:</b> <span id="remaining">—</span></div>
+        <div><b>Стартовый убран:</b> <span id="blockedStarter">—</span></div>
       </div>
     </section>
 
-    <section class="card stage" id="stageCard">
-      <div class="big" id="currentTile">—</div>
+    <section class="card stage">
+      <div class="tableGrid">
+        <div class="slot">
+          <div class="slotTitle">Старейший (сбросится первым)</div>
+          <div class="big" id="tile0">—</div>
+          <div class="imgFrame"><img id="img0" alt="" /><div class="scanlines"></div></div>
+        </div>
 
-      <div class="imgFrame" aria-label="tile image">
-        <img id="tileImg" alt="" />
-        <div class="scanlines"></div>
+        <div class="slot">
+          <div class="slotTitle">Средний</div>
+          <div class="big" id="tile1">—</div>
+          <div class="imgFrame"><img id="img1" alt="" /><div class="scanlines"></div></div>
+        </div>
+
+        <div class="slot">
+          <div class="slotTitle">Новейший</div>
+          <div class="big" id="tile2">—</div>
+          <div class="imgFrame"><img id="img2" alt="" /><div class="scanlines"></div></div>
+        </div>
       </div>
 
-      <div class="hint" id="hint">Нажми «Старт», затем «Следующий тайл»</div>
+      <div class="hint" id="hint">Нажми «Старт + 2 тайла», чтобы выложить первые 3 тайла.</div>
     </section>
 
-    <section class="card historyCard" id="historyCard">
+    <section class="card historyCard">
       <div class="historyHead">
-        <h2>История</h2>
+        <h2>История выкладывания</h2>
         <button id="btnHistory" class="ghost small" type="button" aria-expanded="true">Свернуть</button>
       </div>
       <ol id="history" class="history"></ol>
     </section>
 
-    <footer class="footer" id="footer">
+    <footer class="footer">
       <small>Офлайн включён. Состояние сохраняется в браузере.</small>
     </footer>
   </main>
