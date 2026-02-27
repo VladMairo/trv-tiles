@@ -1,6 +1,4 @@
 :root{
-  --bg:#07070b;
-  --card:#11111a;
   --text:#f3f3ff;
   --muted:#b7b7d6;
 
@@ -9,6 +7,7 @@
   --cyan:#46d6ff;
 
   --border:rgba(255,255,255,.10);
+  --border2:rgba(255,255,255,.14);
   --shadow: 0 18px 45px rgba(0,0,0,.55);
 }
 
@@ -97,7 +96,7 @@ button{
   font-weight:900;
   cursor:pointer;
   flex:1;
-  min-width:220px;
+  min-width:240px;
   text-transform: uppercase;
   letter-spacing:.4px;
 }
@@ -134,23 +133,44 @@ button:disabled{opacity:.45; cursor:not-allowed}
   z-index:2;
 }
 
+/* ===== Slots grid ===== */
 .tableGrid{
   display:grid;
   gap:12px;
   grid-template-columns: 1fr;
 }
-@media (min-width: 900px){
-  .tableGrid{ grid-template-columns: 1fr 1fr 1fr; }
+
+.slot{
+  border:1px solid var(--border2);
+  border-radius:18px;
+  padding:12px;
+  background: rgba(0,0,0,.18);
+  position:relative;
+  overflow:hidden;
+}
+.slot:before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  border-radius:20px;
+  background: linear-gradient(90deg, rgba(255,184,46,.20), rgba(255,78,138,.16), rgba(70,214,255,.12));
+  filter: blur(14px);
+  opacity:.18;
+  pointer-events:none;
 }
 
 .slotTitle{
   color: var(--muted);
-  font-weight:800;
+  font-weight:900;
   font-size:12px;
-  margin-bottom:6px;
+  margin-bottom:8px;
   text-transform: uppercase;
   letter-spacing:.3px;
+  position:relative;
+  z-index:1;
 }
+
+.slotInner{ position:relative; z-index:1; }
 
 .big{
   font-size:34px;
@@ -197,7 +217,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
   margin-top:12px;
   color: var(--muted);
   text-align:center;
-  font-weight:700;
+  font-weight:800;
 }
 
 .historyHead{
@@ -210,7 +230,7 @@ h2{margin:2px 0 8px; font-size:18px}
 .history{margin:0; padding-left:20px; color:var(--muted)}
 .footer{margin-top:10px; color:var(--muted); text-align:center}
 
-/* ===== Animations (picking) ===== */
+/* ===== Picking animation ===== */
 @keyframes shake {
   0%{ transform: translate(0,0) rotate(0deg) }
   20%{ transform: translate(2px,-2px) rotate(-1deg) }
@@ -224,36 +244,22 @@ h2{margin:2px 0 8px; font-size:18px}
   40%{ filter: brightness(1.35) contrast(1.2) }
   100%{ filter: brightness(1) contrast(1) }
 }
-.picking .slot { animation: shake .35s linear infinite; }
-.picking .imgFrame{ animation: flash .55s ease-in-out infinite; }
+.picking #slot2 .slotInner{ animation: shake .35s linear infinite; }
+.picking #slot2 .imgFrame{ animation: flash .55s ease-in-out infinite; }
 
-/* ===== Slide-down conveyor animation ===== */
-.tableGrid{
-  grid-template-columns: 1fr;
+/* ===== Real shift (moving clones) ===== */
+.moveLayer{
+  position:fixed;
+  left:0; top:0;
+  width:100vw; height:100vh;
+  pointer-events:none;
+  z-index:9999;
 }
-
-.slot{
-  transition: transform 260ms ease, opacity 260ms ease;
+.mover{
+  position:fixed;
+  left:0; top:0;
+  will-change: transform;
+  transform: translate3d(0,0,0);
+  transition: transform 320ms cubic-bezier(.2,.9,.2,1);
 }
-
-.slidingDown .slot[data-slot="newest"]{
-  transform: translateY(10px);
-  opacity: 0.92;
-}
-.slidingDown .slot[data-slot="middle"]{
-  transform: translateY(10px);
-  opacity: 0.92;
-}
-.slidingDown .slot[data-slot="oldest"]{
-  transform: translateY(10px);
-  opacity: 0.92;
-}
-
-/* Чуть более “ощутимый” эффект на больших экранах */
-@media (min-width: 900px){
-  .slidingDown .slot[data-slot="newest"],
-  .slidingDown .slot[data-slot="middle"],
-  .slidingDown .slot[data-slot="oldest"]{
-    transform: translateY(14px);
-  }
-}
+.hiddenDuringMove{ visibility:hidden; }
