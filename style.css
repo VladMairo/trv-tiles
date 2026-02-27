@@ -397,3 +397,14 @@ button,
   text-transform: uppercase;
 }
 
+/* ===== FORCE Russo One ===== */
+button,
+.slotTitle,
+.big,
+h2,
+.history,
+.stats,
+.toggle,
+body {
+  font-family: "Russo One", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
+}
