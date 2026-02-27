@@ -378,4 +378,9 @@ html, body{
 .imgHidden{
   display: none !important;
 }
+.topbar,
+.hint,
+.footer{
+  display:none !important;
+}
 
