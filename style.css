@@ -86,7 +86,7 @@ body:before{
 .titles .t2{color:var(--muted); font-size:12px; margin-top:2px}
 
 .row{display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 0}
-button{
+/*button{
   border:1px solid var(--border);
   background:#0d0d14;
   color:var(--text);
@@ -98,7 +98,7 @@ button{
   min-width:0;
   text-transform: uppercase;
   letter-spacing:.4px;
-}
+}*/
 
 button.small{
   min-width:auto;
@@ -477,3 +477,4 @@ button:active{
     0 0px 0 #5a0000,
     0 6px 12px rgba(0,0,0,.4);
 }
+
