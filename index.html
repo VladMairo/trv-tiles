@@ -56,24 +56,24 @@
 
     <section class="card stage">
       <div class="tableGrid">
-        <div class="slot">
-          <div class="slotTitle">Старейший (сбросится первым)</div>
-          <div class="big" id="tile0">—</div>
-          <div class="imgFrame"><img id="img0" alt="" /><div class="scanlines"></div></div>
-        </div>
+  <div class="slot" data-slot="newest">
+    <div class="slotTitle">Новейший (сюда приходит новый)</div>
+    <div class="big" id="tile2">—</div>
+    <div class="imgFrame"><img id="img2" alt="" /><div class="scanlines"></div></div>
+  </div>
 
-        <div class="slot">
-          <div class="slotTitle">Средний</div>
-          <div class="big" id="tile1">—</div>
-          <div class="imgFrame"><img id="img1" alt="" /><div class="scanlines"></div></div>
-        </div>
+  <div class="slot" data-slot="middle">
+    <div class="slotTitle">Средний</div>
+    <div class="big" id="tile1">—</div>
+    <div class="imgFrame"><img id="img1" alt="" /><div class="scanlines"></div></div>
+  </div>
 
-        <div class="slot">
-          <div class="slotTitle">Новейший</div>
-          <div class="big" id="tile2">—</div>
-          <div class="imgFrame"><img id="img2" alt="" /><div class="scanlines"></div></div>
-        </div>
-      </div>
+  <div class="slot" data-slot="oldest">
+    <div class="slotTitle">Старейший (сбросится первым)</div>
+    <div class="big" id="tile0">—</div>
+    <div class="imgFrame"><img id="img0" alt="" /><div class="scanlines"></div></div>
+  </div>
+</div>
 
       <div class="hint" id="hint">Нажми «Старт + 2 тайла», чтобы выложить первые 3 тайла.</div>
     </section>
@@ -94,3 +94,4 @@
   <script src="app.js"></script>
 </body>
 </html>
+
