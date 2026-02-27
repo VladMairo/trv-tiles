@@ -1,10 +1,10 @@
-const STORAGE_KEY = "trv_tile_picker_v1";
+const STORAGE_KEY = "trv_tile_picker_queue_v1";
 
 // База: 1..5, Дополнение: 6..10
 const BASE_TILES = [1, 2, 3, 4, 5];
 const EXP_TILES  = [6, 7, 8, 9, 10];
 
-const IMG_EXT = "jpg"; // <- поменяй на "png", если нужно
+const IMG_EXT = "jpg"; // поменяй на "png", если у тебя png
 
 const $ = (id) => document.getElementById(id);
 
@@ -23,22 +23,42 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// ---------- state ----------
-function buildRemainingTileNumbers(useExpansion) {
-  const nums = [...BASE_TILES];
-  if (useExpansion) nums.push(...EXP_TILES);
-  return nums;
+// ---------- model helpers ----------
+function makeSidesForNumbers(nums) {
+  const sides = [];
+  for (const n of nums) {
+    sides.push(`${n}a`, `${n}b`);
+  }
+  return sides;
 }
 
+function otherSide(id) {
+  const n = parseInt(id, 10);
+  const side = id.endsWith("a") ? "a" : "b";
+  const other = side === "a" ? "b" : "a";
+  return `${n}${other}`;
+}
+
+function tileNumber(id) {
+  return parseInt(id, 10);
+}
+
+// ---------- state ----------
 function defaultState(useExpansion = true) {
+  const nums = [...BASE_TILES, ...(useExpansion ? EXP_TILES : [])];
+
   return {
     useExpansion,
+
     started: false,
-    blockedStarterSide: null, // "1a" или "1b"
-    laidSides: [],            // ["1b","4a",...]
-    remainingTileNumbers: buildRemainingTileNumbers(useExpansion), // физические тайлы (номера)
-    undoStack: [],
-    gameMode: false
+    blockedStarterSide: null,    // "1a" или "1b" — сторона стартового, которая никогда не появится
+    table: [],                   // очередь из 3 элементов: [{id, isStarter}]
+    pool: makeSidesForNumbers(nums), // ПУЛ СТОРОН: ["1a","1b","2a","2b",...]
+    usedSides: [],               // стороны, которые уже когда-либо выпадали (для правила возврата)
+    history: [],                 // по порядку выкладывания: [{id, idx}]
+    nextHistoryIndex: 1,
+
+    undoStack: []
   };
 }
 
@@ -48,23 +68,9 @@ function loadState() {
 
   try {
     const s = JSON.parse(raw);
-    const useExpansion = !!s.useExpansion;
-
-    // пересобираем remaining по истории
-    const all = new Set(buildRemainingTileNumbers(useExpansion));
-    for (const id of (s.laidSides || [])) {
-      const n = parseInt(id, 10);
-      if (!Number.isNaN(n)) all.delete(n);
-    }
-
-    return {
-      ...defaultState(useExpansion),
-      ...s,
-      useExpansion,
-      remainingTileNumbers: [...all].sort((a,b)=>a-b),
-      laidSides: Array.isArray(s.laidSides) ? s.laidSides : [],
-      undoStack: Array.isArray(s.undoStack) ? s.undoStack : []
-    };
+    // мягкая валидация
+    if (!s || typeof s !== "object") return defaultState(true);
+    return s;
   } catch {
     return defaultState(true);
   }
@@ -75,24 +81,55 @@ let state = loadState();
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 // ---------- UI ----------
-function setCurrent(id) {
-  const big = $("currentTile");
-  const img = $("tileImg");
-  const hint = $("hint");
+function setSlot(slotIndex, entry) {
+  const tileEl = $(`tile${slotIndex}`);
+  const imgEl = $(`img${slotIndex}`);
 
-  if (!id) {
-    big.textContent = "—";
-    img.src = "";
-    img.alt = "";
-    hint.textContent = "Нажми «Старт», затем «Следующий тайл»";
+  if (!entry) {
+    tileEl.textContent = "—";
+    imgEl.src = "";
+    imgEl.alt = "";
     return;
   }
 
-  big.textContent = id.toUpperCase();
-  img.src = tileImagePathById(id);
-  img.alt = `Тайл ${id.toUpperCase()}`;
+  tileEl.textContent = entry.id.toUpperCase();
+  imgEl.src = tileImagePathById(entry.id);
+  imgEl.alt = `Тайл ${entry.id.toUpperCase()}`;
+}
 
-  hint.textContent = "Тайл выбран. Поехали!";
+function render() {
+  // table slots
+  setSlot(0, state.table[0] || null);
+  setSlot(1, state.table[1] || null);
+  setSlot(2, state.table[2] || null);
+
+  $("tableCount").textContent = state.table.length.toString();
+  $("remaining").textContent = state.pool.length.toString();
+  $("blockedStarter").textContent = state.blockedStarterSide ? state.blockedStarterSide.toUpperCase() : "—";
+
+  $("btnStart").disabled = state.started;
+  $("btnNext").disabled = !state.started;
+  $("btnUndo").disabled = state.undoStack.length === 0;
+
+  $("useExpansion").checked = !!state.useExpansion;
+  $("useExpansion").disabled = state.started;
+
+  // history: ПОРЯДОК ВЫКЛАДЫВАНИЯ (1..N)
+  const historyEl = $("history");
+  historyEl.innerHTML = "";
+  for (const item of state.history) {
+    const li = document.createElement("li");
+    li.textContent = `${item.idx}. ${item.id.toUpperCase()}`;
+    historyEl.appendChild(li);
+  }
+
+  // hint
+  const hint = $("hint");
+  if (!state.started) {
+    hint.textContent = "Нажми «Старт + 2 тайла», чтобы выложить первые 3 тайла.";
+  } else {
+    hint.textContent = "Нажимай «Новый тайл», чтобы сбрасывать самый старый и добавлять новый.";
+  }
 }
 
 // ---------- animation ----------
@@ -104,14 +141,14 @@ function stopPickingAnim() {
   if (animTimer) { clearInterval(animTimer); animTimer = null; }
 }
 
-function animatePick(candidatesFn, commitPick, durationMs = 900, tickMs = 80) {
+function animatePick(candidatesFn, previewFn, commitPick, durationMs = 850, tickMs = 80) {
   startPickingAnim();
-
   const t0 = performance.now();
+
   animTimer = setInterval(() => {
     const now = performance.now();
     const candidates = candidatesFn();
-    if (candidates.length) setCurrent(choice(candidates));
+    if (candidates.length) previewFn(choice(candidates));
 
     if (now - t0 >= durationMs) {
       stopPickingAnim();
@@ -121,116 +158,175 @@ function animatePick(candidatesFn, commitPick, durationMs = 900, tickMs = 80) {
   }, tickMs);
 }
 
-// ---------- logic ----------
-function startGame() {
-  if (state.started) return;
-
-  const candidatesFn = () => ["1a", "1b"];
-
-  const commitPick = () => {
-    const side = choice(["a", "b"]);
-    const chosenId = `1${side}`;
-    const blockedId = side === "a" ? "1b" : "1a";
-
-    state.started = true;
-    state.blockedStarterSide = blockedId;
-
-    // физический тайл 1 использован => удаляем номер 1
-    state.remainingTileNumbers = state.remainingTileNumbers.filter(n => n !== 1);
-
-    state.laidSides.unshift(chosenId);
-    state.undoStack.unshift({ type: "start" });
-
-    saveState();
-  };
-
-  animatePick(candidatesFn, commitPick, 850, 90);
+// Для превью при анимации: показываем только будущий "Новейший" слот (2)
+function previewNewest(id) {
+  setSlot(2, { id, isStarter: false });
 }
 
-function nextTile() {
+// ---------- core rules ----------
+function removeBothSidesFromPool(id) {
+  // удаляем выбранную сторону и противоположную (физический тайл ушёл на стол)
+  const n = tileNumber(id);
+  const a = `${n}a`;
+  const b = `${n}b`;
+  state.pool = state.pool.filter(x => x !== a && x !== b);
+}
+
+function addToHistory(id) {
+  state.history.push({ idx: state.nextHistoryIndex, id });
+  state.nextHistoryIndex += 1;
+}
+
+function markUsed(id) {
+  if (!state.usedSides.includes(id)) state.usedSides.push(id);
+}
+
+// При сбросе обычного тайла возвращаем в пул ТОЛЬКО противоположную сторону,
+// но только если она НИКОГДА не выпадала раньше.
+function returnOppositeIfAllowed(droppedId) {
+  const opp = otherSide(droppedId);
+
+  if (state.usedSides.includes(opp)) return;      // уже выпадала раньше => не возвращаем
+  if (state.pool.includes(opp)) return;           // уже в пуле => не дублируем
+
+  state.pool.push(opp);
+}
+
+// ---------- gameplay actions ----------
+function startPlusTwo() {
+  if (state.started) return;
+
+  // Сохраняем снапшот для undo
+  state.undoStack.unshift(JSON.stringify(state));
+
+  // 1) Стартовый: выбираем 1a/1b
+  const starterId = choice(["1a", "1b"]);
+  const blocked = starterId === "1a" ? "1b" : "1a";
+
+  state.started = true;
+  state.blockedStarterSide = blocked;
+
+  // Убираем обе стороны тайла 1 из пула навсегда (и блокируем вторую сторону)
+  state.pool = state.pool.filter(x => x !== "1a" && x !== "1b");
+
+  state.table = [{ id: starterId, isStarter: true }];
+  markUsed(starterId);
+  addToHistory(starterId);
+
+  // 2) Добавляем ещё 2 тайла (обычные)
+  for (let i = 0; i < 2; i++) {
+    pickAndPushNewTile();
+  }
+
+  saveState();
+  render();
+}
+
+function pickAndPushNewTile() {
+  // Выбираем случайную сторону из пула, но запрещаем стартовые (их уже нет в пуле, но на всякий случай)
+  const candidates = state.pool.filter(x => !x.startsWith("1"));
+  if (candidates.length === 0) return; // пул пуст
+
+  const id = choice(candidates);
+
+  // Физический тайл кладём на стол: обе стороны уходят из пула
+  removeBothSidesFromPool(id);
+
+  // На стол добавляем запись
+  state.table.push({ id, isStarter: false });
+
+  markUsed(id);
+  addToHistory(id);
+}
+
+function nextWithDrop() {
   if (!state.started) return;
-  if (state.remainingTileNumbers.length === 0) return;
 
-  const candidatesFn = () => {
-    const out = [];
-    for (const n of state.remainingTileNumbers) {
-      if (n === 1) continue;
-      out.push(`${n}a`, `${n}b`);
+  // Сохраняем снапшот для undo
+  state.undoStack.unshift(JSON.stringify(state));
+
+  // 1) Сбрасываем самый старый
+  const dropped = state.table.shift(); // FIFO
+
+  if (dropped) {
+    if (dropped.isStarter) {
+      // стартовый никогда не возвращается — ничего не делаем
+    } else {
+      returnOppositeIfAllowed(dropped.id);
     }
-    return out;
-  };
+  }
 
-  const commitPick = () => {
-    const idx = randInt(state.remainingTileNumbers.length);
-    const n = state.remainingTileNumbers[idx];
+  // 2) Добавляем новый тайл, чтобы снова стало 3
+  // (если пул пуст, то просто останется меньше)
+  if (state.table.length < 3) {
+    // анимация выбора нового тайла, если есть кандидаты
+    const candidatesFn = () => state.pool.filter(x => !x.startsWith("1"));
+    const commitPick = () => {
+      // commitPick должен сделать реальный выбор так же, как pickAndPushNewTile,
+      // но чтобы соответствовать превью — мы делаем новый выбор снова (это нормально),
+      // либо можно усложнить и фиксировать выбранный id. Сделаем фиксирование:
+      const candidates = candidatesFn();
+      if (candidates.length === 0) return;
+      const id = choice(candidates);
 
-    const side = choice(["a", "b"]);
-    const id = `${n}${side}`;
+      removeBothSidesFromPool(id);
+      state.table.push({ id, isStarter: false });
+      markUsed(id);
+      addToHistory(id);
 
-    // удаляем физический тайл номер n целиком
-    state.remainingTileNumbers.splice(idx, 1);
-    state.laidSides.unshift(id);
+      saveState();
+    };
 
-    state.undoStack.unshift({ type: "next", tileNumber: n, side });
-    saveState();
-  };
+    // Если кандидатов нет — просто рендер
+    if (candidatesFn().length === 0) {
+      saveState();
+      render();
+      return;
+    }
 
-  animatePick(candidatesFn, commitPick, 950, 75);
+    // Запускаем анимацию (превью нового тайла в третьем слоте)
+    animatePick(
+      candidatesFn,
+      previewNewest,
+      commitPick,
+      950,
+      75
+    );
+
+    return; // render будет после анимации
+  }
+
+  saveState();
+  render();
 }
 
 function undo() {
   if (state.undoStack.length === 0) return;
-
-  const last = state.undoStack.shift();
-
-  if (last.type === "start") {
-    const useExpansion = state.useExpansion;
-    const gameMode = state.gameMode;
-    state = defaultState(useExpansion);
-    state.gameMode = gameMode;
+  const snap = state.undoStack.shift();
+  try {
+    state = JSON.parse(snap);
     saveState();
     render();
-    return;
-  }
-
-  if (last.type === "next") {
-    const id = `${last.tileNumber}${last.side}`;
-
-    const i = state.laidSides.indexOf(id);
-    if (i >= 0) state.laidSides.splice(i, 1);
-
-    state.remainingTileNumbers.push(last.tileNumber);
-    state.remainingTileNumbers.sort((a,b)=>a-b);
-
-    saveState();
-    render();
+  } catch {
+    // если что-то пошло не так — просто сброс
+    resetGame();
   }
 }
 
 function resetGame() {
   const useExpansion = $("useExpansion").checked;
-  const gameMode = state.gameMode;
-
   state = defaultState(useExpansion);
-  state.gameMode = gameMode;
-
   saveState();
   render();
 }
 
 function onToggleExpansion() {
-  if (state.started || state.laidSides.length > 0) {
+  if (state.started) {
     $("useExpansion").checked = state.useExpansion;
     return;
   }
   state.useExpansion = $("useExpansion").checked;
-  state.remainingTileNumbers = buildRemainingTileNumbers(state.useExpansion);
-  saveState();
-  render();
-}
-
-function toggleGameMode() {
-  state.gameMode = !state.gameMode;
+  state = defaultState(state.useExpansion);
   saveState();
   render();
 }
@@ -244,44 +340,12 @@ function toggleHistory() {
   list.style.display = expanded ? "none" : "block";
 }
 
-// ---------- render ----------
-function render() {
-  document.body.classList.toggle("gameMode", !!state.gameMode);
-  const modeBtn = $("btnMode");
-  modeBtn.setAttribute("aria-pressed", state.gameMode ? "true" : "false");
-  modeBtn.textContent = state.gameMode ? "Обычный режим" : "Игровой режим";
-
-  const currentId = state.laidSides.length ? state.laidSides[0] : null;
-  setCurrent(currentId);
-
-  $("remaining").textContent = state.remainingTileNumbers.length.toString();
-  $("laidCount").textContent = state.laidSides.length.toString();
-  $("blockedStarter").textContent = state.blockedStarterSide ? state.blockedStarterSide.toUpperCase() : "—";
-
-  $("btnStart").disabled = state.started;
-  $("btnNext").disabled = !state.started || state.remainingTileNumbers.length === 0;
-  $("btnUndo").disabled = state.undoStack.length === 0;
-
-  $("useExpansion").checked = !!state.useExpansion;
-  $("useExpansion").disabled = state.started || state.laidSides.length > 0;
-
-  const historyEl = $("history");
-  historyEl.innerHTML = "";
-  for (const id of state.laidSides) {
-    const li = document.createElement("li");
-    li.textContent = id.toUpperCase();
-    historyEl.appendChild(li);
-  }
-}
-
 // ---------- events ----------
-$("btnStart").addEventListener("click", startGame);
-$("btnNext").addEventListener("click", nextTile);
+$("btnStart").addEventListener("click", startPlusTwo);
+$("btnNext").addEventListener("click", nextWithDrop);
 $("btnUndo").addEventListener("click", undo);
 $("btnReset").addEventListener("click", resetGame);
 $("useExpansion").addEventListener("change", onToggleExpansion);
-
-$("btnMode").addEventListener("click", toggleGameMode);
 $("btnHistory").addEventListener("click", toggleHistory);
 
 render();
