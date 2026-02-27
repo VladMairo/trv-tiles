@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Thunder Road: Vendetta — Tiles</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#ffb82e" />
+
+  <!-- iOS icons -->
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/icon-120.png" />
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png" />
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">TR</div>
+        <div class="titles">
+          <div class="t1">Thunder Road</div>
+          <div class="t2">Vendetta • Tile Picker</div>
+        </div>
+      </div>
+
+      <button id="btnMode" class="modeBtn" type="button" aria-pressed="false">
+        Игровой режим
+      </button>
+    </header>
+
+    <section class="card controls" id="controlsCard">
+      <label class="toggle">
+        <input id="useExpansion" type="checkbox" checked />
+        <span>Добавить «Дьявольская мясорубка» (6–10)</span>
+      </label>
+
+      <div class="row">
+        <button id="btnStart" class="primary">Старт (1a / 1b)</button>
+        <button id="btnNext" class="primary" disabled>Следующий тайл</button>
+      </div>
+
+      <div class="row">
+        <button id="btnUndo" class="ghost" disabled>Отменить</button>
+        <button id="btnReset" class="danger">Сброс</button>
+      </div>
+
+      <div class="stats">
+        <div><b>Осталось физических тайлов:</b> <span id="remaining">—</span></div>
+        <div><b>Выложено (стороны):</b> <span id="laidCount">—</span></div>
+        <div><b>Стартер убран:</b> <span id="blockedStarter">—</span></div>
+      </div>
+    </section>
+
+    <section class="card stage" id="stageCard">
+      <div class="big" id="currentTile">—</div>
+
+      <div class="imgFrame" aria-label="tile image">
+        <img id="tileImg" alt="" />
+        <div class="scanlines"></div>
+      </div>
+
+      <div class="hint" id="hint">Нажми «Старт», затем «Следующий тайл»</div>
+    </section>
+
+    <section class="card historyCard" id="historyCard">
+      <div class="historyHead">
+        <h2>История</h2>
+        <button id="btnHistory" class="ghost small" type="button" aria-expanded="true">Свернуть</button>
+      </div>
+      <ol id="history" class="history"></ol>
+    </section>
+
+    <footer class="footer" id="footer">
+      <small>Офлайн включён. Состояние сохраняется в браузере.</small>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
