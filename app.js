@@ -1,10 +1,10 @@
-const STORAGE_KEY = "trv_tile_picker_queue_v1";
+const STORAGE_KEY = "trv_tile_picker_queue_v2";
 
 // База: 1..5, Дополнение: 6..10
 const BASE_TILES = [1, 2, 3, 4, 5];
 const EXP_TILES  = [6, 7, 8, 9, 10];
 
-const IMG_EXT = "jpg"; // поменяй на "png", если у тебя png
+const IMG_EXT = "jpg"; // <- поменяй на "png", если нужно
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,7 +12,6 @@ function randInt(maxExclusive) { return Math.floor(Math.random() * maxExclusive)
 function choice(arr) { return arr[randInt(arr.length)]; }
 
 function tileImagePathById(id) {
-  // id вида "6b"
   return `img/trv_tile_${id}.${IMG_EXT}`;
 }
 
@@ -23,52 +22,46 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// ---------- model helpers ----------
+// ---------- helpers ----------
 function makeSidesForNumbers(nums) {
   const sides = [];
-  for (const n of nums) {
-    sides.push(`${n}a`, `${n}b`);
-  }
+  for (const n of nums) sides.push(`${n}a`, `${n}b`);
   return sides;
 }
-
 function otherSide(id) {
   const n = parseInt(id, 10);
   const side = id.endsWith("a") ? "a" : "b";
-  const other = side === "a" ? "b" : "a";
-  return `${n}${other}`;
+  return `${n}${side === "a" ? "b" : "a"}`;
 }
-
-function tileNumber(id) {
-  return parseInt(id, 10);
-}
+function tileNumber(id) { return parseInt(id, 10); }
 
 // ---------- state ----------
 function defaultState(useExpansion = true) {
   const nums = [...BASE_TILES, ...(useExpansion ? EXP_TILES : [])];
-
   return {
     useExpansion,
-
     started: false,
-    blockedStarterSide: null,    // "1a" или "1b" — сторона стартового, которая никогда не появится
-    table: [],                   // очередь из 3 элементов: [{id, isStarter}]
-    pool: makeSidesForNumbers(nums), // ПУЛ СТОРОН: ["1a","1b","2a","2b",...]
-    usedSides: [],               // стороны, которые уже когда-либо выпадали (для правила возврата)
-    history: [],                 // по порядку выкладывания: [{id, idx}]
+    blockedStarterSide: null,
+
+    // table: FIFO очередь (oldest -> newest) по игровым правилам
+    // Визуально показываем: newest сверху (slot2), middle (slot1), oldest снизу (slot0)
+    table: [],
+
+    pool: makeSidesForNumbers(nums), // пул СТОРОН
+    usedSides: [],
+
+    history: [],           // [{idx, id}] в порядке выкладывания
     nextHistoryIndex: 1,
 
-    undoStack: []
+    undoStack: []          // строковые снапшоты
   };
 }
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return defaultState(true);
-
   try {
     const s = JSON.parse(raw);
-    // мягкая валидация
     if (!s || typeof s !== "object") return defaultState(true);
     return s;
   } catch {
@@ -77,11 +70,11 @@ function loadState() {
 }
 
 let state = loadState();
-
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 // ---------- UI ----------
 function setSlot(slotIndex, entry) {
+  // slotIndex: 2=newest (top), 1=middle, 0=oldest (bottom)
   const tileEl = $(`tile${slotIndex}`);
   const imgEl = $(`img${slotIndex}`);
 
@@ -91,17 +84,25 @@ function setSlot(slotIndex, entry) {
     imgEl.alt = "";
     return;
   }
-
   tileEl.textContent = entry.id.toUpperCase();
   imgEl.src = tileImagePathById(entry.id);
   imgEl.alt = `Тайл ${entry.id.toUpperCase()}`;
 }
 
+function renderTable() {
+  // table хранится как FIFO: [oldest, middle, newest]
+  const oldest = state.table[0] || null;
+  const middle = state.table[1] || null;
+  const newest = state.table[2] || null;
+
+  // визуально:
+  setSlot(2, newest);
+  setSlot(1, middle);
+  setSlot(0, oldest);
+}
+
 function render() {
-  // table slots
-  setSlot(0, state.table[0] || null);
-  setSlot(1, state.table[1] || null);
-  setSlot(2, state.table[2] || null);
+  renderTable();
 
   $("tableCount").textContent = state.table.length.toString();
   $("remaining").textContent = state.pool.length.toString();
@@ -114,7 +115,7 @@ function render() {
   $("useExpansion").checked = !!state.useExpansion;
   $("useExpansion").disabled = state.started;
 
-  // history: ПОРЯДОК ВЫКЛАДЫВАНИЯ (1..N)
+  // история: 1..N по порядку выкладывания
   const historyEl = $("history");
   historyEl.innerHTML = "";
   for (const item of state.history) {
@@ -123,183 +124,188 @@ function render() {
     historyEl.appendChild(li);
   }
 
-  // hint
-  const hint = $("hint");
-  if (!state.started) {
-    hint.textContent = "Нажми «Старт + 2 тайла», чтобы выложить первые 3 тайла.";
-  } else {
-    hint.textContent = "Нажимай «Новый тайл», чтобы сбрасывать самый старый и добавлять новый.";
-  }
+  $("hint").textContent = state.started
+    ? "Нажимай «Новый тайл», чтобы сбрасывать старейший и добавлять новый в верхний слот."
+    : "Нажми «Старт + 2 тайла», чтобы заполнить конвейер из 3 тайлов.";
 }
 
-// ---------- animation ----------
-let animTimer = null;
+// ---------- animations ----------
+let pickTimer = null;
 
-function startPickingAnim() { document.body.classList.add("picking"); }
-function stopPickingAnim() {
+function startPicking() { document.body.classList.add("picking"); }
+function stopPicking() {
   document.body.classList.remove("picking");
-  if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  if (pickTimer) { clearInterval(pickTimer); pickTimer = null; }
 }
 
-function animatePick(candidatesFn, previewFn, commitPick, durationMs = 850, tickMs = 80) {
-  startPickingAnim();
-  const t0 = performance.now();
+function startSlideDown() { document.body.classList.add("slidingDown"); }
+function stopSlideDown() { document.body.classList.remove("slidingDown"); }
 
-  animTimer = setInterval(() => {
-    const now = performance.now();
-    const candidates = candidatesFn();
-    if (candidates.length) previewFn(choice(candidates));
-
-    if (now - t0 >= durationMs) {
-      stopPickingAnim();
-      commitPick();
-      render();
-    }
-  }, tickMs);
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Для превью при анимации: показываем только будущий "Новейший" слот (2)
-function previewNewest(id) {
-  setSlot(2, { id, isStarter: false });
+// Анимация рандома в верхнем слоте (newest / tile2)
+function animatePickInNewest(candidatesFn, durationMs = 850, tickMs = 80) {
+  return new Promise((resolve) => {
+    startPicking();
+    const t0 = performance.now();
+
+    pickTimer = setInterval(() => {
+      const now = performance.now();
+      const candidates = candidatesFn();
+      if (candidates.length) {
+        // превью только в верхний слот (newest)
+        setSlot(2, { id: choice(candidates), isStarter: false });
+      }
+
+      if (now - t0 >= durationMs) {
+        stopPicking();
+        const finalCandidates = candidatesFn();
+        const picked = finalCandidates.length ? choice(finalCandidates) : null;
+        resolve(picked);
+      }
+    }, tickMs);
+  });
+}
+
+// “Сдвиг вниз” визуально + обновление таблицы по факту
+async function slideDownOnce() {
+  startSlideDown();
+  await sleep(220);   // время “проседания”
+  stopSlideDown();
+  await sleep(20);
 }
 
 // ---------- core rules ----------
-function removeBothSidesFromPool(id) {
-  // удаляем выбранную сторону и противоположную (физический тайл ушёл на стол)
-  const n = tileNumber(id);
-  const a = `${n}a`;
-  const b = `${n}b`;
-  state.pool = state.pool.filter(x => x !== a && x !== b);
-}
-
 function addToHistory(id) {
   state.history.push({ idx: state.nextHistoryIndex, id });
   state.nextHistoryIndex += 1;
 }
-
 function markUsed(id) {
   if (!state.usedSides.includes(id)) state.usedSides.push(id);
 }
-
-// При сбросе обычного тайла возвращаем в пул ТОЛЬКО противоположную сторону,
-// но только если она НИКОГДА не выпадала раньше.
+function removeBothSidesFromPool(id) {
+  const n = tileNumber(id);
+  const a = `${n}a`, b = `${n}b`;
+  state.pool = state.pool.filter(x => x !== a && x !== b);
+}
 function returnOppositeIfAllowed(droppedId) {
   const opp = otherSide(droppedId);
-
-  if (state.usedSides.includes(opp)) return;      // уже выпадала раньше => не возвращаем
-  if (state.pool.includes(opp)) return;           // уже в пуле => не дублируем
-
+  if (state.usedSides.includes(opp)) return;
+  if (state.pool.includes(opp)) return;
   state.pool.push(opp);
 }
 
-// ---------- gameplay actions ----------
-function startPlusTwo() {
-  if (state.started) return;
-
-  // Сохраняем снапшот для undo
-  state.undoStack.unshift(JSON.stringify(state));
-
-  // 1) Стартовый: выбираем 1a/1b
-  const starterId = choice(["1a", "1b"]);
-  const blocked = starterId === "1a" ? "1b" : "1a";
-
-  state.started = true;
-  state.blockedStarterSide = blocked;
-
-  // Убираем обе стороны тайла 1 из пула навсегда (и блокируем вторую сторону)
-  state.pool = state.pool.filter(x => x !== "1a" && x !== "1b");
-
-  state.table = [{ id: starterId, isStarter: true }];
-  markUsed(starterId);
-  addToHistory(starterId);
-
-  // 2) Добавляем ещё 2 тайла (обычные)
-  for (let i = 0; i < 2; i++) {
-    pickAndPushNewTile();
-  }
-
-  saveState();
-  render();
-}
-
-function pickAndPushNewTile() {
-  // Выбираем случайную сторону из пула, но запрещаем стартовые (их уже нет в пуле, но на всякий случай)
-  const candidates = state.pool.filter(x => !x.startsWith("1"));
-  if (candidates.length === 0) return; // пул пуст
-
-  const id = choice(candidates);
-
-  // Физический тайл кладём на стол: обе стороны уходят из пула
+// Добавляем новый тайл в конец очереди (как newest)
+function commitNewTileToTable(id, isStarter) {
   removeBothSidesFromPool(id);
-
-  // На стол добавляем запись
-  state.table.push({ id, isStarter: false });
-
+  state.table.push({ id, isStarter: !!isStarter });
   markUsed(id);
   addToHistory(id);
 }
 
-function nextWithDrop() {
-  if (!state.started) return;
+// ---------- START: staged conveyor sequence ----------
+async function startPlusTwo() {
+  if (state.started) return;
 
-  // Сохраняем снапшот для undo
+  // undo snapshot
   state.undoStack.unshift(JSON.stringify(state));
 
-  // 1) Сбрасываем самый старый
-  const dropped = state.table.shift(); // FIFO
+  state.started = true;
 
-  if (dropped) {
-    if (dropped.isStarter) {
-      // стартовый никогда не возвращается — ничего не делаем
-    } else {
-      returnOppositeIfAllowed(dropped.id);
-    }
+  // убираем стартовые стороны из пула после выбора (но пока оставим кандидаты для анимации)
+  const pickStarter = await animatePickInNewest(() => ["1a", "1b"], 800, 85);
+  const starterId = pickStarter || choice(["1a", "1b"]);
+  state.blockedStarterSide = (starterId === "1a") ? "1b" : "1a";
+
+  // Коммитим стартовый: он должен попасть на стол как newest (пока единственный)
+  // Убираем обе стороны тайла 1 из пула НАВСЕГДА
+  state.pool = state.pool.filter(x => x !== "1a" && x !== "1b");
+  state.table = [];
+  commitNewTileToTable(starterId, true);
+
+  saveState();
+  render();
+
+  // Сдвиг: newest (стартер) -> middle
+  await slideDownOnce();
+  // (по факту сдвиг в данных — это просто то, что позже добавятся новые newest,
+  // а стартер станет middle, затем oldest по FIFO)
+  // В данных ничего “перекладывать” не нужно: FIFO сам решит позиции.
+  // Но чтобы визуально было “переехало”, достаточно перерендера после добавлений.
+
+  // Выбор 2-го тайла (не стартовый)
+  const pick2 = await animatePickInNewest(
+    () => state.pool.filter(x => !x.startsWith("1")),
+    900,
+    75
+  );
+  if (pick2) {
+    commitNewTileToTable(pick2, false);
+    saveState();
+    render();
   }
 
-  // 2) Добавляем новый тайл, чтобы снова стало 3
-  // (если пул пуст, то просто останется меньше)
-  if (state.table.length < 3) {
-    // анимация выбора нового тайла, если есть кандидаты
-    const candidatesFn = () => state.pool.filter(x => !x.startsWith("1"));
-    const commitPick = () => {
-      // commitPick должен сделать реальный выбор так же, как pickAndPushNewTile,
-      // но чтобы соответствовать превью — мы делаем новый выбор снова (это нормально),
-      // либо можно усложнить и фиксировать выбранный id. Сделаем фиксирование:
-      const candidates = candidatesFn();
-      if (candidates.length === 0) return;
-      const id = choice(candidates);
+  // Сдвиг: middle -> oldest, newest -> middle
+  await slideDownOnce();
 
-      removeBothSidesFromPool(id);
-      state.table.push({ id, isStarter: false });
-      markUsed(id);
-      addToHistory(id);
-
-      saveState();
-    };
-
-    // Если кандидатов нет — просто рендер
-    if (candidatesFn().length === 0) {
-      saveState();
-      render();
-      return;
-    }
-
-    // Запускаем анимацию (превью нового тайла в третьем слоте)
-    animatePick(
-      candidatesFn,
-      previewNewest,
-      commitPick,
-      950,
-      75
-    );
-
-    return; // render будет после анимации
+  // Выбор 3-го тайла (не стартовый)
+  const pick3 = await animatePickInNewest(
+    () => state.pool.filter(x => !x.startsWith("1")),
+    900,
+    75
+  );
+  if (pick3) {
+    commitNewTileToTable(pick3, false);
+    saveState();
+    render();
   }
 
   saveState();
   render();
 }
 
+// ---------- NEXT: drop oldest, slide, pick new in newest ----------
+async function nextWithDrop() {
+  if (!state.started) return;
+
+  // undo snapshot
+  state.undoStack.unshift(JSON.stringify(state));
+
+  // 1) сбрасываем oldest (первый в FIFO)
+  const dropped = state.table.shift();
+  if (dropped) {
+    if (!dropped.isStarter) {
+      returnOppositeIfAllowed(dropped.id);
+    }
+  }
+
+  saveState();
+  render();
+
+  // 2) “сдвиг вниз” визуально (оставшиеся поднимаются по роли: newest->middle, middle->oldest)
+  await slideDownOnce();
+  renderTable(); // просто обновим табличку (на всякий)
+
+  // 3) выбираем новый в newest (верх)
+  const candidatesFn = () => state.pool.filter(x => !x.startsWith("1"));
+  if (candidatesFn().length === 0) {
+    saveState();
+    render();
+    return;
+  }
+
+  const picked = await animatePickInNewest(candidatesFn, 900, 75);
+  if (picked) {
+    commitNewTileToTable(picked, false);
+  }
+
+  saveState();
+  render();
+}
+
+// ---------- other actions ----------
 function undo() {
   if (state.undoStack.length === 0) return;
   const snap = state.undoStack.shift();
@@ -308,7 +314,6 @@ function undo() {
     saveState();
     render();
   } catch {
-    // если что-то пошло не так — просто сброс
     resetGame();
   }
 }
@@ -325,8 +330,8 @@ function onToggleExpansion() {
     $("useExpansion").checked = state.useExpansion;
     return;
   }
-  state.useExpansion = $("useExpansion").checked;
-  state = defaultState(state.useExpansion);
+  const useExpansion = $("useExpansion").checked;
+  state = defaultState(useExpansion);
   saveState();
   render();
 }
