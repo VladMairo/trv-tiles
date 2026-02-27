@@ -13,21 +13,30 @@
 
 *{box-sizing:border-box}
 html,body{height:100%}
+html{
+  background:#08080c;
+}
 body{
   margin:0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color:var(--text);
+  background: transparent;
+}
+
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
 
   background:
-    linear-gradient(
-      rgba(8,8,12,0.85),
-      rgba(8,8,12,0.92)
-    ),
-    url("assets/bg-comic-1.jpg");
+    linear-gradient(rgba(8,8,12,0.85), rgba(8,8,12,0.92)),
+    url("assets/bg-comic-1-fixed.jpg");
 
   background-size: cover;
   background-position: center;
-  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 /* grit */
@@ -380,10 +389,7 @@ body::before{
   z-index:-1;
 }
 
-html{
-  background:#08080c;
-}
-
 html, body{
   overscroll-behavior: none;
 }
+
