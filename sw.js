@@ -1,4 +1,4 @@
-const CACHE_NAME = "tr-tiles-cache-v1";
+const CACHE_NAME = "trv-cache-v3";
 
 const ASSETS = [
   "./",
@@ -7,6 +7,10 @@ const ASSETS = [
   "./app.js",
   "./manifest.webmanifest",
 
+  "./icons/icon-120.png",
+  "./icons/icon-152.png",
+  "./icons/icon-167.png",
+  "./icons/icon-180.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 
@@ -62,4 +66,5 @@ self.addEventListener("fetch", (event) => {
         .catch(() => caches.match("./index.html"));
     })
   );
+
 });
