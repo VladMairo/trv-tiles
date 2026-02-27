@@ -122,11 +122,18 @@ function setSlotUI(slotIndex, entry) {
 
   if (!entry) {
     tileEl.textContent = "—";
-    imgEl.src = "";
+
+    // iOS-safe clear:
+    imgEl.classList.add("imgHidden");
+    imgEl.removeAttribute("src");   // ✅ лучше чем src=""
     imgEl.alt = "";
+
     return;
   }
+
   tileEl.textContent = entry.id.toUpperCase();
+
+  imgEl.classList.remove("imgHidden");
   imgEl.src = tileImagePathById(entry.id);
   imgEl.alt = `Тайл ${entry.id.toUpperCase()}`;
 }
@@ -423,7 +430,25 @@ async function nextWithDrop() {
   saveState();
   render();
 }
+function cleanupTransientUI() {
+  // Остановить анимации выбора
+  stopPicking();
 
+  // Удалить возможные оставшиеся анимационные слои
+  document.querySelectorAll(".moveLayer").forEach(el => el.remove());
+  document.querySelectorAll(".mover").forEach(el => el.remove());
+
+  // Снять hiddenDuringMove со всех слотов (если зависло после shift)
+  document.querySelectorAll(".slotInner.hiddenDuringMove").forEach(el => {
+    el.classList.remove("hiddenDuringMove");
+  });
+
+  // Форсируем перерисовку (маленький "пинок" iOS)
+  document.body.style.transform = "translateZ(0)";
+  requestAnimationFrame(() => {
+    document.body.style.transform = "";
+  });
+}
 // ---------- other actions ----------
 function undo() {
   if (state.undoStack.length === 0) return;
@@ -443,6 +468,7 @@ function undo() {
 }
 
 function resetGame() {
+  cleanupTransientUI();
   const useExpansion = $("useExpansion").checked;
   state = defaultState(useExpansion);
   saveState();
@@ -478,3 +504,4 @@ $("useExpansion").addEventListener("change", onToggleExpansion);
 $("btnHistory").addEventListener("click", toggleHistory);
 
 render();
+
