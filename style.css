@@ -368,10 +368,11 @@ html, body{
 
   background:
     linear-gradient(rgba(8,8,12,0.85), rgba(8,8,12,0.92)),
-    url("assets/bg-comic-1-fixed.jpg");
+    url("assets/bg-comic-1.jpg");
 
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
+
 
