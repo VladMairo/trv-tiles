@@ -17,11 +17,17 @@ body{
   margin:0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color:var(--text);
+
   background:
-    radial-gradient(900px 700px at 15% 0%, rgba(255,184,46,.20) 0%, rgba(7,7,11,0) 55%),
-    radial-gradient(900px 700px at 85% 15%, rgba(255,78,138,.14) 0%, rgba(7,7,11,0) 60%),
-    radial-gradient(1100px 900px at 50% 120%, rgba(70,214,255,.10) 0%, rgba(7,7,11,0) 55%),
-    linear-gradient(180deg, #0a0a10, #06060a);
+    linear-gradient(
+      rgba(8,8,12,0.85),
+      rgba(8,8,12,0.92)
+    ),
+    url("assets/bg-comic-1.jpg");
+
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 /* grit */
@@ -357,3 +363,4 @@ h2{margin:2px 0 8px; font-size:18px}
     transition: none !important;
   }
 }
+
