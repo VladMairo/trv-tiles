@@ -1,4 +1,4 @@
-const CACHE_NAME = "trv-cache-v5";
+const CACHE_NAME = "trv-cache-v6";
 
 const ASSETS = [
   "./",
@@ -71,5 +71,6 @@ self.addEventListener("fetch", (event) => {
   );
 
 });
+
 
 
