@@ -379,3 +379,11 @@ body::before{
     );
   z-index:-1;
 }
+
+html{
+  background:#08080c;
+}
+
+html, body{
+  overscroll-behavior: none;
+}
