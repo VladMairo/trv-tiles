@@ -408,3 +408,72 @@ h2,
 body {
   font-family: "Russo One", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
 }
+
+/* ===============================
+   PUNK FIRE BUTTON STYLE
+   =============================== */
+
+button{
+  position: relative;
+  font-family: "Russo One", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 2px solid rgba(0,0,0,.6);
+
+  background: linear-gradient(
+    180deg,
+    #ff8a00 0%,
+    #ff3d00 45%,
+    #b80000 100%
+  );
+
+  color: white;
+
+  box-shadow:
+    0 4px 0 #5a0000,
+    0 10px 25px rgba(255,60,0,.35);
+
+  transform: skewX(-4deg);
+  transition: all .15s ease;
+  cursor: pointer;
+}
+
+/* выпрямляем текст внутри */
+button span,
+button *{
+  transform: skewX(4deg);
+}
+
+/* свечение огня */
+button::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  border-radius:16px;
+  background: radial-gradient(
+    circle at 50% 20%,
+    rgba(255,180,0,.5),
+    transparent 70%
+  );
+  opacity:.6;
+  z-index:-1;
+}
+
+/* hover */
+button:hover{
+  box-shadow:
+    0 4px 0 #5a0000,
+    0 14px 35px rgba(255,80,0,.6);
+  filter: brightness(1.1);
+}
+
+/* нажатие */
+button:active{
+  transform: skewX(-4deg) translateY(4px);
+  box-shadow:
+    0 0px 0 #5a0000,
+    0 6px 12px rgba(0,0,0,.4);
+}
