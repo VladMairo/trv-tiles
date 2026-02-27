@@ -226,3 +226,34 @@ h2{margin:2px 0 8px; font-size:18px}
 }
 .picking .slot { animation: shake .35s linear infinite; }
 .picking .imgFrame{ animation: flash .55s ease-in-out infinite; }
+
+/* ===== Slide-down conveyor animation ===== */
+.tableGrid{
+  grid-template-columns: 1fr;
+}
+
+.slot{
+  transition: transform 260ms ease, opacity 260ms ease;
+}
+
+.slidingDown .slot[data-slot="newest"]{
+  transform: translateY(10px);
+  opacity: 0.92;
+}
+.slidingDown .slot[data-slot="middle"]{
+  transform: translateY(10px);
+  opacity: 0.92;
+}
+.slidingDown .slot[data-slot="oldest"]{
+  transform: translateY(10px);
+  opacity: 0.92;
+}
+
+/* Чуть более “ощутимый” эффект на больших экранах */
+@media (min-width: 900px){
+  .slidingDown .slot[data-slot="newest"],
+  .slidingDown .slot[data-slot="middle"],
+  .slidingDown .slot[data-slot="oldest"]{
+    transform: translateY(14px);
+  }
+}
