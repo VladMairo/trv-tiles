@@ -1,4 +1,4 @@
-const STORAGE_KEY = "trv_tile_picker_queue_v2";
+const STORAGE_KEY = "trv_tile_picker_conveyor_v1";
 
 // База: 1..5, Дополнение: 6..10
 const BASE_TILES = [1, 2, 3, 4, 5];
@@ -10,10 +10,7 @@ const $ = (id) => document.getElementById(id);
 
 function randInt(maxExclusive) { return Math.floor(Math.random() * maxExclusive); }
 function choice(arr) { return arr[randInt(arr.length)]; }
-
-function tileImagePathById(id) {
-  return `img/trv_tile_${id}.${IMG_EXT}`;
-}
+function tileImagePathById(id) { return `img/trv_tile_${id}.${IMG_EXT}`; }
 
 // ---------- PWA: register service worker ----------
 if ("serviceWorker" in navigator) {
@@ -34,36 +31,82 @@ function otherSide(id) {
   return `${n}${side === "a" ? "b" : "a"}`;
 }
 function tileNumber(id) { return parseInt(id, 10); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ---------- state ----------
+// ---------- state model (3 fixed slots) ----------
+/**
+ * slots[0] = oldest (нижний)
+ * slots[1] = middle (средний)
+ * slots[2] = newest (верхний)
+ */
 function defaultState(useExpansion = true) {
   const nums = [...BASE_TILES, ...(useExpansion ? EXP_TILES : [])];
+
   return {
     useExpansion,
     started: false,
     blockedStarterSide: null,
 
-    // table: FIFO очередь (oldest -> newest) по игровым правилам
-    // Визуально показываем: newest сверху (slot2), middle (slot1), oldest снизу (slot0)
-    table: [],
+    slots: [null, null, null], // {id,isStarter} or null
 
     pool: makeSidesForNumbers(nums), // пул СТОРОН
     usedSides: [],
 
-    history: [],           // [{idx, id}] в порядке выкладывания
+    history: [],           // [{idx, id}] по порядку выкладывания
     nextHistoryIndex: 1,
 
-    undoStack: []          // строковые снапшоты
+    undoStack: []          // snapshots
   };
+}
+
+// миграция истории: если в старом сохранении были строки или дубли "2. 2. 5B"
+function normalizeHistory(h) {
+  const out = [];
+  if (!Array.isArray(h)) return out;
+
+  for (const item of h) {
+    if (typeof item === "string") {
+      // попытка вытащить id вида "5b" из строки
+      const m = item.toLowerCase().match(/(\d{1,2}[ab])/);
+      if (m) out.push({ idx: out.length + 1, id: m[1] });
+      continue;
+    }
+    if (item && typeof item === "object") {
+      let id = String(item.id || "").toLowerCase();
+
+      // если id вдруг содержит индексы "2. 5b" — вытащим только "5b"
+      const m = id.match(/(\d{1,2}[ab])/);
+      if (m) id = m[1];
+
+      if (id) out.push({ idx: out.length + 1, id });
+    }
+  }
+  return out;
 }
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return defaultState(true);
+
   try {
     const s = JSON.parse(raw);
     if (!s || typeof s !== "object") return defaultState(true);
-    return s;
+
+    // нормализация истории (фикс бага "2. 2. 5B")
+    const hist = normalizeHistory(s.history);
+    const nextIdx = hist.length + 1;
+
+    // нормализация slots
+    const slots = Array.isArray(s.slots) ? s.slots.slice(0,3) : [null,null,null];
+    while (slots.length < 3) slots.push(null);
+
+    return {
+      ...defaultState(!!s.useExpansion),
+      ...s,
+      slots,
+      history: hist,
+      nextHistoryIndex: nextIdx
+    };
   } catch {
     return defaultState(true);
   }
@@ -72,9 +115,8 @@ function loadState() {
 let state = loadState();
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
-// ---------- UI ----------
-function setSlot(slotIndex, entry) {
-  // slotIndex: 2=newest (top), 1=middle, 0=oldest (bottom)
+// ---------- UI render ----------
+function setSlotUI(slotIndex, entry) {
   const tileEl = $(`tile${slotIndex}`);
   const imgEl = $(`img${slotIndex}`);
 
@@ -89,23 +131,18 @@ function setSlot(slotIndex, entry) {
   imgEl.alt = `Тайл ${entry.id.toUpperCase()}`;
 }
 
-function renderTable() {
-  // table хранится как FIFO: [oldest, middle, newest]
-  const oldest = state.table[0] || null;
-  const middle = state.table[1] || null;
-  const newest = state.table[2] || null;
-
-  // визуально:
-  setSlot(2, newest);
-  setSlot(1, middle);
-  setSlot(0, oldest);
+function renderSlots() {
+  setSlotUI(2, state.slots[2]); // newest
+  setSlotUI(1, state.slots[1]); // middle
+  setSlotUI(0, state.slots[0]); // oldest
 }
 
 function render() {
-  renderTable();
+  renderSlots();
 
-  $("tableCount").textContent = state.table.length.toString();
-  $("remaining").textContent = state.pool.length.toString();
+  const count = state.slots.filter(Boolean).length;
+  $("tableCount").textContent = String(count);
+  $("remaining").textContent = String(state.pool.length);
   $("blockedStarter").textContent = state.blockedStarterSide ? state.blockedStarterSide.toUpperCase() : "—";
 
   $("btnStart").disabled = state.started;
@@ -115,37 +152,33 @@ function render() {
   $("useExpansion").checked = !!state.useExpansion;
   $("useExpansion").disabled = state.started;
 
-  // история: 1..N по порядку выкладывания
+  // История: строго "N. ID"
   const historyEl = $("history");
   historyEl.innerHTML = "";
   for (const item of state.history) {
     const li = document.createElement("li");
-    li.textContent = `${item.idx}. ${item.id.toUpperCase()}`;
+    li.textContent = `${item.idx}. ${String(item.id).toUpperCase()}`;
     historyEl.appendChild(li);
   }
 
   $("hint").textContent = state.started
-    ? "Нажимай «Новый тайл», чтобы сбрасывать старейший и добавлять новый в верхний слот."
-    : "Нажми «Старт + 2 тайла», чтобы заполнить конвейер из 3 тайлов.";
+    ? "«НОВЫЙ ТАЙЛ» сбрасывает старейший (нижний), сдвигает остальные вниз и добавляет новый сверху."
+    : "Нажми «СТАРТ + 2 ТАЙЛА»: выбор сверху → сдвиг → выбор → сдвиг → выбор.";
 }
 
-// ---------- animations ----------
+// ---------- picking animation (preview in newest slot) ----------
 let pickTimer = null;
-
 function startPicking() { document.body.classList.add("picking"); }
 function stopPicking() {
   document.body.classList.remove("picking");
   if (pickTimer) { clearInterval(pickTimer); pickTimer = null; }
 }
 
-function startSlideDown() { document.body.classList.add("slidingDown"); }
-function stopSlideDown() { document.body.classList.remove("slidingDown"); }
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function previewNewest(id) {
+  // показываем превью в UI, не меняя state
+  setSlotUI(2, { id, isStarter: false });
 }
 
-// Анимация рандома в верхнем слоте (newest / tile2)
 function animatePickInNewest(candidatesFn, durationMs = 850, tickMs = 80) {
   return new Promise((resolve) => {
     startPicking();
@@ -154,42 +187,37 @@ function animatePickInNewest(candidatesFn, durationMs = 850, tickMs = 80) {
     pickTimer = setInterval(() => {
       const now = performance.now();
       const candidates = candidatesFn();
-      if (candidates.length) {
-        // превью только в верхний слот (newest)
-        setSlot(2, { id: choice(candidates), isStarter: false });
-      }
+      if (candidates.length) previewNewest(choice(candidates));
 
       if (now - t0 >= durationMs) {
         stopPicking();
         const finalCandidates = candidatesFn();
-        const picked = finalCandidates.length ? choice(finalCandidates) : null;
-        resolve(picked);
+        resolve(finalCandidates.length ? choice(finalCandidates) : null);
       }
     }, tickMs);
   });
 }
 
-// “Сдвиг вниз” визуально + обновление таблицы по факту
-async function slideDownOnce() {
-  startSlideDown();
-  await sleep(220);   // время “проседания”
-  stopSlideDown();
-  await sleep(20);
-}
-
 // ---------- core rules ----------
 function addToHistory(id) {
-  state.history.push({ idx: state.nextHistoryIndex, id });
+  // id должен быть чистым, без "2. "
+  const clean = String(id).toLowerCase().match(/(\d{1,2}[ab])/);
+  if (!clean) return;
+
+  state.history.push({ idx: state.nextHistoryIndex, id: clean[1] });
   state.nextHistoryIndex += 1;
 }
+
 function markUsed(id) {
   if (!state.usedSides.includes(id)) state.usedSides.push(id);
 }
+
 function removeBothSidesFromPool(id) {
   const n = tileNumber(id);
   const a = `${n}a`, b = `${n}b`;
   state.pool = state.pool.filter(x => x !== a && x !== b);
 }
+
 function returnOppositeIfAllowed(droppedId) {
   const opp = otherSide(droppedId);
   if (state.usedSides.includes(opp)) return;
@@ -197,98 +225,191 @@ function returnOppositeIfAllowed(droppedId) {
   state.pool.push(opp);
 }
 
-// Добавляем новый тайл в конец очереди (как newest)
-function commitNewTileToTable(id, isStarter) {
+function commitTileToNewest(id, isStarter) {
+  // кладём тайл в верхний слот (newest)
   removeBothSidesFromPool(id);
-  state.table.push({ id, isStarter: !!isStarter });
+  state.slots[2] = { id, isStarter: !!isStarter };
+
   markUsed(id);
   addToHistory(id);
 }
 
-// ---------- START: staged conveyor sequence ----------
+// ---------- REAL move animation between slots ----------
+function getInnerEl(slotIndex) {
+  // slotIndex 2/1/0 => DOM ids slot2/slot1/slot0
+  return document.querySelector(`#slot${slotIndex} .slotInner`);
+}
+
+function cloneInner(innerEl) {
+  const clone = innerEl.cloneNode(true);
+  clone.classList.remove("hiddenDuringMove");
+  return clone;
+}
+
+async function animateShiftDownReal() {
+  // Цель: переместить ВИЗУАЛЬНО контент:
+  // newest (2) -> middle (1)
+  // middle (1) -> oldest (0)
+  // oldest (0) “уходит” (его уже могли сбросить правила)
+  //
+  // Мы делаем только анимацию переезда элементов. Состояние (state.slots) мы сдвигаем ОТДЕЛЬНО.
+
+  const from2 = getInnerEl(2);
+  const from1 = getInnerEl(1);
+
+  const to1 = getInnerEl(1);
+  const to0 = getInnerEl(0);
+
+  // если нечего двигать — просто пауза
+  const has2 = state.slots[2] !== null;
+  const has1 = state.slots[1] !== null;
+
+  if (!has2 && !has1) {
+    await sleep(60);
+    return;
+  }
+
+  // слой для движения
+  const layer = document.createElement("div");
+  layer.className = "moveLayer";
+  document.body.appendChild(layer);
+
+  const movers = [];
+
+  function setupMove(fromEl, toEl) {
+    const rFrom = fromEl.getBoundingClientRect();
+    const rTo = toEl.getBoundingClientRect();
+
+    const mover = document.createElement("div");
+    mover.className = "mover";
+    mover.style.width = `${rFrom.width}px`;
+    mover.style.height = `${rFrom.height}px`;
+    mover.style.transform = `translate3d(${rFrom.left}px, ${rFrom.top}px, 0)`;
+
+    const cloned = cloneInner(fromEl);
+    cloned.style.margin = "0";
+    mover.appendChild(cloned);
+    layer.appendChild(mover);
+
+    movers.push({ mover, rFrom, rTo });
+  }
+
+  if (has2) setupMove(from2, to1);
+  if (has1) setupMove(from1, to0);
+
+  // скрываем оригиналы на время движения
+  if (has2) from2.classList.add("hiddenDuringMove");
+  if (has1) from1.classList.add("hiddenDuringMove");
+
+  // next frame -> запускаем transition
+  await sleep(16);
+  for (const m of movers) {
+    m.mover.style.transform = `translate3d(${m.rTo.left}px, ${m.rTo.top}px, 0)`;
+  }
+
+  // ждём окончания
+  await sleep(360);
+
+  // чистим
+  if (has2) from2.classList.remove("hiddenDuringMove");
+  if (has1) from1.classList.remove("hiddenDuringMove");
+  layer.remove();
+}
+
+// ---------- GAME FLOW ----------
+
+function pushUndo() {
+  state.undoStack.unshift(JSON.stringify(state));
+}
+
+function shiftSlotsDownInState() {
+  // newest -> middle, middle -> oldest, oldest -> null (освободится под возможный сброс отдельно)
+  state.slots[0] = state.slots[1];
+  state.slots[1] = state.slots[2];
+  state.slots[2] = null;
+}
+
 async function startPlusTwo() {
   if (state.started) return;
 
-  // undo snapshot
-  state.undoStack.unshift(JSON.stringify(state));
-
+  pushUndo();
   state.started = true;
 
-  // убираем стартовые стороны из пула после выбора (но пока оставим кандидаты для анимации)
-  const pickStarter = await animatePickInNewest(() => ["1a", "1b"], 800, 85);
-  const starterId = pickStarter || choice(["1a", "1b"]);
+  // 1) Выбор стартового в newest (верх)
+  const starterPick = await animatePickInNewest(() => ["1a", "1b"], 800, 85);
+  const starterId = starterPick || choice(["1a", "1b"]);
   state.blockedStarterSide = (starterId === "1a") ? "1b" : "1a";
 
-  // Коммитим стартовый: он должен попасть на стол как newest (пока единственный)
-  // Убираем обе стороны тайла 1 из пула НАВСЕГДА
+  // Убираем обе стороны 1 из пула навсегда
   state.pool = state.pool.filter(x => x !== "1a" && x !== "1b");
-  state.table = [];
-  commitNewTileToTable(starterId, true);
 
+  // Кладём стартер в newest (верх)
+  commitTileToNewest(starterId, true);
   saveState();
   render();
 
-  // Сдвиг: newest (стартер) -> middle
-  await slideDownOnce();
-  // (по факту сдвиг в данных — это просто то, что позже добавятся новые newest,
-  // а стартер станет middle, затем oldest по FIFO)
-  // В данных ничего “перекладывать” не нужно: FIFO сам решит позиции.
-  // Но чтобы визуально было “переехало”, достаточно перерендера после добавлений.
+  // 2) Shift down (реальная анимация), затем сдвиг в state
+  await animateShiftDownReal();
+  shiftSlotsDownInState();
+  saveState();
+  render();
 
-  // Выбор 2-го тайла (не стартовый)
+  // 3) Выбор второго тайла в newest
   const pick2 = await animatePickInNewest(
     () => state.pool.filter(x => !x.startsWith("1")),
     900,
     75
   );
   if (pick2) {
-    commitNewTileToTable(pick2, false);
+    commitTileToNewest(pick2, false);
     saveState();
     render();
   }
 
-  // Сдвиг: middle -> oldest, newest -> middle
-  await slideDownOnce();
+  // 4) Shift down
+  await animateShiftDownReal();
+  shiftSlotsDownInState();
+  saveState();
+  render();
 
-  // Выбор 3-го тайла (не стартовый)
+  // 5) Выбор третьего тайла в newest
   const pick3 = await animatePickInNewest(
     () => state.pool.filter(x => !x.startsWith("1")),
     900,
     75
   );
   if (pick3) {
-    commitNewTileToTable(pick3, false);
-    saveState();
-    render();
+    commitTileToNewest(pick3, false);
   }
 
   saveState();
   render();
 }
 
-// ---------- NEXT: drop oldest, slide, pick new in newest ----------
 async function nextWithDrop() {
   if (!state.started) return;
 
-  // undo snapshot
-  state.undoStack.unshift(JSON.stringify(state));
+  pushUndo();
 
-  // 1) сбрасываем oldest (первый в FIFO)
-  const dropped = state.table.shift();
+  // 1) Сбрасываем старейший (нижний слот 0)
+  const dropped = state.slots[0];
   if (dropped) {
-    if (!dropped.isStarter) {
-      returnOppositeIfAllowed(dropped.id);
-    }
+    if (!dropped.isStarter) returnOppositeIfAllowed(dropped.id);
   }
+
+  // Освобождаем oldest
+  state.slots[0] = null;
 
   saveState();
   render();
 
-  // 2) “сдвиг вниз” визуально (оставшиеся поднимаются по роли: newest->middle, middle->oldest)
-  await slideDownOnce();
-  renderTable(); // просто обновим табличку (на всякий)
+  // 2) Реальный shift down (анимация), затем state shift
+  await animateShiftDownReal();
+  shiftSlotsDownInState();
+  saveState();
+  render();
 
-  // 3) выбираем новый в newest (верх)
+  // 3) Выбираем новый в newest (верх)
   const candidatesFn = () => state.pool.filter(x => !x.startsWith("1"));
   if (candidatesFn().length === 0) {
     saveState();
@@ -297,9 +418,7 @@ async function nextWithDrop() {
   }
 
   const picked = await animatePickInNewest(candidatesFn, 900, 75);
-  if (picked) {
-    commitNewTileToTable(picked, false);
-  }
+  if (picked) commitTileToNewest(picked, false);
 
   saveState();
   render();
@@ -311,6 +430,11 @@ function undo() {
   const snap = state.undoStack.shift();
   try {
     state = JSON.parse(snap);
+
+    // на всякий — нормализуем историю после undo
+    state.history = normalizeHistory(state.history);
+    state.nextHistoryIndex = state.history.length + 1;
+
     saveState();
     render();
   } catch {
