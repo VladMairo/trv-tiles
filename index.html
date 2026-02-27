@@ -38,8 +38,8 @@
       </label>
 
       <div class="row">
-        <button id="btnStart" class="primary">Старт + 2 тайла</button>
-        <button id="btnNext" class="primary" disabled>Новый тайл (сброс старого)</button>
+        <button id="btnStart" class="primary">СТАРТ + 2 ТАЙЛА</button>
+        <button id="btnNext" class="primary" disabled>НОВЫЙ ТАЙЛ (СБРОС СТАРОГО)</button>
       </div>
 
       <div class="row">
@@ -56,26 +56,33 @@
 
     <section class="card stage">
       <div class="tableGrid">
-  <div class="slot" data-slot="newest">
-    <div class="slotTitle">Новейший (сюда приходит новый)</div>
-    <div class="big" id="tile2">—</div>
-    <div class="imgFrame"><img id="img2" alt="" /><div class="scanlines"></div></div>
-  </div>
+        <!-- Визуальный порядок: Новейший (сверху) -> Средний -> Старейший (внизу) -->
+        <div class="slot" id="slot2" data-slot="newest">
+          <div class="slotTitle">Новейший</div>
+          <div class="slotInner">
+            <div class="big" id="tile2">—</div>
+            <div class="imgFrame"><img id="img2" alt="" /><div class="scanlines"></div></div>
+          </div>
+        </div>
 
-  <div class="slot" data-slot="middle">
-    <div class="slotTitle">Средний</div>
-    <div class="big" id="tile1">—</div>
-    <div class="imgFrame"><img id="img1" alt="" /><div class="scanlines"></div></div>
-  </div>
+        <div class="slot" id="slot1" data-slot="middle">
+          <div class="slotTitle">Средний</div>
+          <div class="slotInner">
+            <div class="big" id="tile1">—</div>
+            <div class="imgFrame"><img id="img1" alt="" /><div class="scanlines"></div></div>
+          </div>
+        </div>
 
-  <div class="slot" data-slot="oldest">
-    <div class="slotTitle">Старейший (сбросится первым)</div>
-    <div class="big" id="tile0">—</div>
-    <div class="imgFrame"><img id="img0" alt="" /><div class="scanlines"></div></div>
-  </div>
-</div>
+        <div class="slot" id="slot0" data-slot="oldest">
+          <div class="slotTitle">Старейший (сбросится первым)</div>
+          <div class="slotInner">
+            <div class="big" id="tile0">—</div>
+            <div class="imgFrame"><img id="img0" alt="" /><div class="scanlines"></div></div>
+          </div>
+        </div>
+      </div>
 
-      <div class="hint" id="hint">Нажми «Старт + 2 тайла», чтобы выложить первые 3 тайла.</div>
+      <div class="hint" id="hint">Нажми «СТАРТ + 2 ТАЙЛА», чтобы заполнить 3 слота.</div>
     </section>
 
     <section class="card historyCard">
@@ -94,4 +101,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
