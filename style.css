@@ -384,4 +384,16 @@ html, body{
   display:none !important;
 }
 
+/* ===== Thunder Road Font ===== */
+body{
+  font-family: "Russo One", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  letter-spacing: 0.5px;
+}
+
+button,
+.slotTitle,
+.big{
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
 
