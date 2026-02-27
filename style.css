@@ -375,4 +375,7 @@ html, body{
   background-repeat: no-repeat;
 }
 
+.imgHidden{
+  display: none !important;
+}
 
