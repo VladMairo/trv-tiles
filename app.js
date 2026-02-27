@@ -171,6 +171,13 @@ function render() {
   $("hint").textContent = state.started
     ? "«НОВЫЙ ТАЙЛ» сбрасывает старейший (нижний), сдвигает остальные вниз и добавляет новый сверху."
     : "Нажми «СТАРТ + 2 ТАЙЛА»: выбор сверху → сдвиг → выбор → сдвиг → выбор.";
+  // iOS repaint fix (особенно для standalone PWA)
+requestAnimationFrame(() => {
+  const el = document.body;
+  el.style.webkitTransform = "translateZ(0)";
+  el.offsetHeight; // force reflow
+  el.style.webkitTransform = "";
+});
 }
 
 // ---------- picking animation (preview in newest slot) ----------
@@ -504,4 +511,5 @@ $("useExpansion").addEventListener("change", onToggleExpansion);
 $("btnHistory").addEventListener("click", toggleHistory);
 
 render();
+
 
