@@ -1,4 +1,4 @@
-const CACHE_NAME = "trv-cache-v4";
+const CACHE_NAME = "trv-cache-v5";
 
 const ASSETS = [
   "./",
@@ -13,6 +13,9 @@ const ASSETS = [
   "./icons/icon-180.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+
+  //бэк
+  "./assets/bg-comic-1.jpg",
 
   // 20 картинок сторон:
   "./img/trv_tile_1a.jpg",
@@ -68,4 +71,5 @@ self.addEventListener("fetch", (event) => {
   );
 
 });
+
 
